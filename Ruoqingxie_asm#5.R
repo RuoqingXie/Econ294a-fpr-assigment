@@ -14,7 +14,7 @@ a1 <- ggplot(diamonds,
 )+ 
   geom_point(aes(colour = factor(clarity)),alpha=0.2
 )+ 
-  scale_x_log10() + scale_y_log10() 
+  scale_x_log10() + scale_y_log10() + scale_size(range = c(2.5,9))
 a1
 ##b##
 b1 <- ggplot(
