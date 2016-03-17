@@ -1,0 +1,277 @@
+---
+title: "Final-Econ294a"
+author: "Ruoqing Xie"
+Date: "2016-03-16"
+output: html_document
+---
+
+##Report of flights
+
+Given the data of flights,weather,planes, airport,
+we want to measure the relation between departure delay and flights being cancelled.
+
+####Main idea
+step 1:Get data from SQLite: before, I already build SQLite file and copy all the data we need to file. So we just need to get data from the file every time we want to use them.
+
+step 2: find the realtionship by regression: the regression will show if the factors are significant enought to influence the departure delay and flights being cancelled.
+
+step 3: Use graph to show the regression result: because the result of regression could be too long to show in the file, I use graph instead.
+
+```{r,echo=F,include=F}
+library(nycflights13)
+library(dplyr)
+library(RSQLite)
+library(tidyr)
+library(stargazer)
+library(ggplot2)
+library(scales)
+```
+
+###Part a.measure the relation between departure delary and cancel-considering weather.
+
+
+####step 1:dealing with SQLite data
+
+```{r}
+my_db <- src_sqlite("my_db.sqlite1", create = T)
+nycflights13_sqlite()
+
+flights_sqlite <- copy_to(
+  my_db, flights, temporary = FALSE, 
+  indexes = list(
+    c("year", "month", "day", "hour"), 
+    "tailnum")
+)
+
+weather_sqlite <- copy_to(
+  my_db, weather, temporary = FALSE, 
+  indexes = list(
+    c("year", "month","day", "hour"),
+    "pressure"
+    )
+)
+
+planes_sqlite <- copy_to(
+  my_db, planes, temporary = FALSE, 
+  indexes = list(c("tailnum"),
+                 "type")
+)
+
+airports_sqlite <- copy_to(
+  my_db, airports, temporary = FALSE, 
+  indexes = list("faa")
+)
+```
+
+
+
+####step 2:find cancelled and merge the dataframe
+
+```{r}
+flights = tbl(my_db, "flights") %>% 
+  collect() %>%
+  mutate(canceled = is.na(arr_time))%>%
+  mutate(canceled = as.numeric(canceled))
+
+flights <- flights %>%
+  unite(
+    col = date, 
+    ... = year, month, day, hour,
+    sep = "-"
+  )
+
+weather <- tbl(my_db,"weather")%>%
+  collect()%>%
+  select(year:hour, temp,dewp,wind_speed,precip,visib)%>%
+  unite(
+    col = date, 
+    ... = year, month, day, hour,
+    sep = "-"
+  )
+
+flight_weather1 <- weather%>%
+  inner_join(flights,by="date")%>%
+  group_by(canceled)%>%
+  arrange(dep_delay)%>%
+  select(dewp,wind_speed,visib,precip,canceled,dep_delay)
+```
+
+
+
+####step 3: using linear and non-linear regression to find relationship between variables
+
+```{r}
+rela <- lm(dep_delay~visib+wind_speed+dewp+precip,flight_weather1)
+relation1<-glm(canceled~dep_delay+visib+wind_speed+dewp+precip,flight_weather1,family=binomial(link = "logit"))
+```
+
+
+####step 4: plot the graph
+
+From the regression above we can see only dewp(dew point) and visib(Visibility in miles) have significant influence on the flights being cancelled. I use graph to specify the influence:
+
+```{r echo=F, fig.height=3, include=F}
+plot1 <- ggplot(
+  data = flight_weather1,
+  aes(x=dep_delay,fill=factor(dewp))
+) + 
+  geom_histogram(aes(x=dep_delay, y=..density..))+
+  facet_grid("canceled ~ .")+ylab("cancel")
+```
+
+
+```{r echo=F, fig.height=3,include=F}
+plot2 <- ggplot(
+  data = flight_weather1,
+  aes(x=dep_delay,fill=factor(visib))
+) + 
+  geom_histogram(aes(x=dep_delay, y=..density..))+
+  facet_grid("canceled ~ .")+ylab("density")
+```
+
+```{r,echo=F, fig.height=3}
+plot1
+plot2
+```
+
+
+####Conclusion: weather condistion has sinificant influence on the departure of flight. And the dewp point and Visibility in miles are the most two important factors to consider when deciding if the flight are ble to depart or not.
+
+
+###Part b.measure the relation between departure delary and cancel-considering time
+
+
+####step 1:get data from SQLite and select the dataframe
+
+```{r}
+flight_time <- flights%>%
+  select(date,minute,contains("time"),canceled,dep_delay)
+
+flight_time1 <- flight_time %>%
+  separate(
+    date, 
+    c("year", "month", "day","hour"), #name of new column(s)
+    "-"
+  )%>%
+  group_by(canceled)%>%
+  arrange(dep_time,dep_delay)%>%
+  filter(!is.na(dep_delay))
+```
+
+
+
+####step2: using linear and non-linear regression to find relationship between variables
+
+```{r}
+lmrel<- lm(dep_delay~dep_time+month+day+hour+minute, flight_time1)
+relation2 <- glm(canceled~dep_delay+dep_time+month+day+hour+minute, flight_time1,family=binomial(link = "logit"))
+```
+
+
+####step 3: Plot the graph
+
+From the regression above we know that the most significant factor that may influence departure is month. This could be explain as some particular month will have worse condition for flights(weather, or holiday)
+I use graph to show:
+
+```{r echo=F, fig.height=3, include=F}
+plot3 <-ggplot(
+  data = flight_time1,
+  aes(x=dep_delay, fill = month)
+) + 
+  geom_histogram(aes(x=dep_delay, y=..density..))+
+  facet_grid("canceled ~ .")+ylab("density")
+```
+```{r,echo=F, fig.height=3}
+plot3
+```
+
+
+####conclusion: time does not necessary has a significant influence on the flighs being cancelled and the departure delay. Althougt in some specify month, data shows that flighs are less likly to be cancelled, we still need to pay attention that it could be the coincident because we only use 1-year-period to test. The sample size is not big enought.
+
+
+
+###Part C.measure the relation between departure delary and cancel-considering destination
+
+
+####step 1: get data from SQLite and merge dataframe
+
+```{r}
+airports <- tbl(
+  my_db,sql("SELECT name, alt, faa as dest
+        FROM airports")
+  )%>%
+  collect()
+
+flight_dest <- airports%>%
+  inner_join(flights,by="dest")
+```
+
+
+####step 2: using linear and non-linear regression to find relationship between variables
+
+```{r}
+relc <- lm(dep_delay~dest,flight_dest)
+relation3 <- glm(canceled~dep_delay+dest-1,flight_dest,family=binomial(link = "logit"))
+```
+
+
+####step 3: Plot the graph
+
+From the regression above we find that some of the destination has significant influence on the flights's departure and being cancelled, for example: ACK, CAE, TYS, TUL, RIC, DSN. The flights to those place will increase the possibility to delay or cancel.
+
+```{r eval=T, fig.height=3,echo=F}
+plot4<- ggplot(
+  data = flight_dest,
+  aes(x=dep_delay, fill = dest)
+) + 
+  geom_histogram(aes(x=dep_delay, y=..density..))+
+  facet_grid("canceled ~ .")+ylab("density")
+```
+```{r,echo=F, fig.height=3}
+plot4
+```
+
+####Conclusion: The destination has influence on the departure delay and being cancelled of the flights, and some of them are significant, but not all of them has postive influence on delay, some of the destination lower the possibility of delay. 
+
+
+###Part d. measure the relation between departure delary and cancel-considering plane's characteristics
+
+
+####step 1: gt data from SQLite and merge
+
+```{r}
+planes <- tbl(
+  my_db,sql("planes")
+  )%>%
+  collect()
+
+flight_plane <- planes%>%
+  inner_join(flights,by="tailnum")%>%
+  select(canceled,dep_delay,year,type,manufacturer)%>%
+  group_by(canceled)
+```
+
+####step 2: sing linear and non-linear regression to find relationship between variables
+```{r}
+reld <- lm(dep_delay~year+type+manufacturer, flight_plane)
+relation4 <- lm(canceled~dep_delay+year+type+manufacturer, flight_plane)
+```
+
+####step 3: Plot the graph
+
+From the regression above we know that only year has siginificant influence on this 2 varible:
+
+```{r echo=F, fig.height=3,include=F}
+plot6 <- ggplot(
+  data = flight_plane,
+  aes(x=dep_delay, fill = factor(year))
+) + 
+  geom_histogram(aes(x=dep_delay, y=..density..))+
+  facet_grid("canceled ~ .")+ylab("density")
+```
+```{r,echo=F, fig.height=3.5}
+plot6
+```
+
+
+####Conclusion: The old plane are much easy to cause departure delay or cancel. Other factors(manufacturer and tpye) has no significant effect on them.
