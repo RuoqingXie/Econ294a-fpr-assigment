@@ -259,7 +259,7 @@ relation4 <- lm(canceled~dep_delay+year+type+manufacturer, flight_plane)
 
 ####step 3: Plot the graph
 
-From the regression above we know that only year has siginificant influence on this 2 varible:
+From the regression above we know that only year has siginificant influence on this 2 varibles:
 
 ```{r echo=F, fig.height=3,include=F}
 plot6 <- ggplot(
