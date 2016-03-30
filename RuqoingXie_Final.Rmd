@@ -110,7 +110,7 @@ relation1<-glm(canceled~dep_delay+visib+wind_speed+dewp+precip,flight_weather1,f
 
 From the regression above we can see only dewp(dew point) and visib(Visibility in miles) have significant influence on the flights being cancelled. I use graph to specify the influence:
 
-```{r echo=F, fig.height=3, include=F}
+```{r echo=F, fig.height=3}
 plot1 <- ggplot(
   data = flight_weather1,
   aes(x=dep_delay,fill=factor(dewp))
@@ -120,18 +120,13 @@ plot1 <- ggplot(
 ```
 
 
-```{r echo=F, fig.height=3,include=F}
+```{r echo=F, fig.height=3}
 plot2 <- ggplot(
   data = flight_weather1,
   aes(x=dep_delay,fill=factor(visib))
 ) + 
   geom_histogram(aes(x=dep_delay, y=..density..))+
   facet_grid("canceled ~ .")+ylab("density")
-```
-
-```{r,echo=F, fig.height=3}
-plot1
-plot2
 ```
 
 
